@@ -9,15 +9,14 @@ import signal
 import threading
 
 if len(sys.argv) < 2:
-    print(f"\nERROR: Missing command-line argument: Expected \"{sys.argv[0]} <user>\"")
-    sys.exit(1)
+    sys.argv.append('all')
 
 print('Running... (press ctrl+c to interrupt)')
 # Open a log file in append mode
 log_file = open(f'{sys.argv[0]}.log', 'a')
 # Redirect stdout to the log file
 sys.stdout = log_file
-print('\nLog file opened.')
+print('Log file opened.')
 
 # Initialize an Event to signal the threads to stop
 stop_event = threading.Event()
@@ -39,8 +38,14 @@ def keyboardInterruptHandler(signal, frame):
     # Wait a bit for threads to finish current work
     threading.Timer(1.0, finalize_results).start()
 
+# Global flag to track if finalize_results has been called
+finalize_called = False
+
 def finalize_results():
-    global header, results, user, log_file
+    global header, results, user, log_file, finalize_called
+    if finalize_called:
+        return  # Prevent double execution
+    finalize_called = True
     header += ['permId']
     mode = 'a' if os.path.exists(f'{user}_file_ids_and_permIds.csv') else 'w'
     with open(f'{user}_file_ids_and_permIds.csv', mode, newline='') as file:
@@ -49,12 +54,12 @@ def finalize_results():
             writer.writerow(header)  # Write header only if file is being created
         with results_lock:
             writer.writerows(results)
-    print(f"\nResults saved in {user}_file_ids_and_permIds.csv.\nLog can be viewed at {sys.argv[0]}.log. Exiting now :)")
 
     # Remember to close the log file and reset sys.stdout when you're done
     sys.stdout = sys.__stdout__
     log_file.close()
-
+    
+    print(f"\nResults saved in {user}_file_ids_and_permIds.csv.\nLog can be viewed at {sys.argv[0]}.log. Exiting now :)\n")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, keyboardInterruptHandler)
@@ -87,7 +92,7 @@ def find_last_processed_file_id(user):
         with open(f'{user}_file_ids_and_permIds.csv', 'r', newline='') as file:
             last_row = None
             for last_row in csv.reader(file): pass  # Iterate to the last row
-            if last_row and len(last_row) >= 2:
+            if last_row and len(last_row) >= 2 and last_row[1] != 'id':
                 return last_row[1]  # Assuming the file ID is in the second column
     except FileNotFoundError:
         pass  # File doesn't exist, which is fine on first run
@@ -103,16 +108,16 @@ data = []  # This will hold the rows to be processed, skipping the already proce
 with open(f'{user}_file_ids.csv', 'r', newline='') as file:
     reader = csv.reader(file)
     header, *raw_data = [row for row in reader]
-    for row in raw_data:
+    for i in range(len(raw_data)):
+        row = raw_data[i]
         if start_processing:
             data.append(row)
         elif row[1] == last_processed_id:
             print(f"Found last row processed: {row}")
             start_processing = True  # Found the last processed ID, start processing the next row
-        else:
-            print(f"Skipping row: {row}")
 
 # Start processing
+print("made it here")
 with ThreadPoolExecutor() as executor:
     futures = [executor.submit(process_row, row) for row in data]
 
