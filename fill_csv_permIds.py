@@ -117,7 +117,6 @@ with open(f'{user}_file_ids.csv', 'r', newline='') as file:
             start_processing = True  # Found the last processed ID, start processing the next row
 
 # Start processing
-print("made it here")
 with ThreadPoolExecutor() as executor:
     futures = [executor.submit(process_row, row) for row in data]
 
